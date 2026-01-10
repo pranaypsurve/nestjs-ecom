@@ -16,7 +16,9 @@ import { ShippingAddressModule } from './shipping-address/shipping-address.modul
   imports: [
     ConfigModule.forRoot({
       isGlobal: true,
-      envFilePath: `.env.${process.env.NODE_ENV || 'development'}`,
+      envFilePath: process.env.NODE_ENV === 'production' 
+        ? undefined  // Railway uses environment variables, not .env files
+        : `.env.${process.env.NODE_ENV || 'development'}`,
     }),
     JwtModule.registerAsync({
       global: true,
@@ -34,17 +36,52 @@ import { ShippingAddressModule } from './shipping-address/shipping-address.modul
     }),
     TypeOrmModule.forRootAsync({
       imports: [ConfigModule],
-      useFactory: (configService: ConfigService) => ({
-        type: configService.get<'mysql' | 'postgres'>('DB_TYPE', 'mysql') as any,
-        host: configService.get<string>('DB_HOST', 'localhost'),
-        port: configService.get<number>('DB_PORT', 3306),
-        username: configService.get<string>('DB_USERNAME', 'root'), 
-        password: configService.get<string>('DB_PASSWORD', ''),
-        database: configService.get<string>('DB_DATABASE', 'ecommerce'),
-        autoLoadEntities: true,
-        // dropSchema: true, // WARNING: This will drop all tables! Remove after first run
-        synchronize: true,
-      }),
+      useFactory: (configService: ConfigService) => {
+        // Priority 1: Check if MYSQL_PUBLIC_URL is provided (Railway MySQL URL)
+        const mysqlPublicUrl = configService.get<string>('MYSQL_PUBLIC_URL');
+        
+        if (mysqlPublicUrl) {
+          // Parse Railway MySQL URL: mysql://username:password@host:port/database
+          try {
+            // Replace mysql:// with http:// temporarily for URL parsing
+            const httpUrl = mysqlPublicUrl.replace(/^mysql:\/\//, 'http://');
+            const url = new URL(httpUrl);
+            
+            return {
+              type: 'mysql' as any,
+              host: url.hostname,
+              port: parseInt(url.port) || 3306,
+              username: decodeURIComponent(url.username || 'root'),
+              password: decodeURIComponent(url.password || ''),
+              database: url.pathname.replace(/^\//, '') || 'railway',
+              autoLoadEntities: true,
+              synchronize: configService.get<string>('NODE_ENV') !== 'production',
+              // SSL configuration required for Railway external connections
+              extra: {
+                ssl: {
+                  rejectUnauthorized: false
+                }
+              }
+            };
+          } catch (error) {
+            console.error('Error parsing MYSQL_PUBLIC_URL:', error);
+            // Fall through to use individual environment variables
+          }
+        }
+        
+        // Priority 2: Fallback to individual environment variables (local MySQL or custom config)
+        return {
+          type: configService.get<'mysql' | 'postgres'>('DB_TYPE', 'mysql') as any,
+          host: configService.get<string>('DB_HOST', 'localhost'),
+          port: configService.get<number>('DB_PORT', 3306),
+          username: configService.get<string>('DB_USERNAME', 'root'),
+          password: configService.get<string>('DB_PASSWORD', ''),
+          database: configService.get<string>('DB_DATABASE', 'ecommerce'),
+          autoLoadEntities: true,
+          synchronize: configService.get<string>('NODE_ENV') !== 'production',
+          // No SSL for local connections
+        };
+      },
       inject: [ConfigService],
     }),
     AuthModule,
