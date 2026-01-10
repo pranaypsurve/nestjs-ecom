@@ -49,19 +49,15 @@ import { ShippingAddressModule } from './shipping-address/shipping-address.modul
             
             return {
               type: 'mysql' as any,
-              host: url.hostname,
-              port: parseInt(url.port) || 3306,
-              username: decodeURIComponent(url.username || 'root'),
-              password: decodeURIComponent(url.password || ''),
-              database: url.pathname.replace(/^\//, '') || 'railway',
+              host: configService.get<string>('DB_HOST', 'localhost'),
+          port: configService.get<number>('DB_PORT', 3306),
+          username: configService.get<string>('DB_USERNAME', 'root'),
+          password: configService.get<string>('DB_PASSWORD', ''),
+          database: configService.get<string>('DB_DATABASE', 'railway'),
               autoLoadEntities: true,
               synchronize: configService.get<string>('NODE_ENV') !== 'production',
               // SSL configuration required for Railway external connections
-              extra: {
-                ssl: {
-                  rejectUnauthorized: false
-                }
-              }
+             
             };
           } catch (error) {
             console.error('Error parsing MYSQL_PUBLIC_URL:', error);
