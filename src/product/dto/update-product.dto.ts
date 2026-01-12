@@ -60,9 +60,10 @@ export class UpdateProductDto {
   @IsOptional()
   material?: string;
 
-  @IsString()
+  @IsArray()
+  @IsString({ each: true })
   @IsOptional()
-  image?: string;
+  images?: string[];
 
   @IsString()
   @IsOptional()

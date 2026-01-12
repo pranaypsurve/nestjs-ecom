@@ -22,6 +22,8 @@ export class User {
   role: string;
   @Column({ nullable: true })
   phone?: string;
+  @Column({ nullable: true })
+  profile_picture?: string;
   @CreateDateColumn()
   created_at: Date;
   @UpdateDateColumn()

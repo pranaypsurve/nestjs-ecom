@@ -51,8 +51,8 @@ export class Product {
   @Column({ nullable: true })
   material?: string;
 
-  @Column({ nullable: true })
-  image?: string;
+  @Column('simple-array', { nullable: true })
+  images?: string[];
 
   @Column({ nullable: true })
   thumbnail?: string;

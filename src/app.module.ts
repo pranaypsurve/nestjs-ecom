@@ -2,6 +2,8 @@ import { Module } from '@nestjs/common';
 import { ConfigModule, ConfigService } from '@nestjs/config';
 import { JwtModule } from '@nestjs/jwt';
 import { TypeOrmModule } from '@nestjs/typeorm';
+import { ThrottlerModule, ThrottlerGuard } from '@nestjs/throttler';
+import { APP_GUARD } from '@nestjs/core';
 import { AppController } from './app.controller';
 import { AppService } from './app.service';
 import { AuthModule } from './auth/auth.module';
@@ -11,6 +13,7 @@ import { OrderModule } from './order/order.module';
 import { CouponModule } from './coupon/coupon.module';
 import { GiftVoucherModule } from './gift-voucher/gift-voucher.module';
 import { ShippingAddressModule } from './shipping-address/shipping-address.module';
+import { FileModule } from './file/file.module';
 
 @Module({
   imports: [
@@ -20,6 +23,10 @@ import { ShippingAddressModule } from './shipping-address/shipping-address.modul
         ? undefined  // Railway uses environment variables, not .env files
         : `.env.${process.env.NODE_ENV || 'development'}`,
     }),
+    ThrottlerModule.forRoot([{
+      ttl: 60000, // 1 minute
+      limit: 40, // 100 requests per minute (default, can be overridden)
+    }]),
     JwtModule.registerAsync({
       global: true,
       imports: [ConfigModule],
@@ -55,6 +62,7 @@ import { ShippingAddressModule } from './shipping-address/shipping-address.modul
     CouponModule,
     GiftVoucherModule,
     ShippingAddressModule,
+    FileModule,
   ],
   controllers: [AppController],
   providers: [AppService],

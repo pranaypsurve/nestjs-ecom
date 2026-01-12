@@ -57,14 +57,14 @@ export class UserService {
 
   async findAll(): Promise<User[]> {
     return await this.userRepo.find({
-      select: ['id', 'name', 'email', 'role', 'phone', 'is_active', 'created_at', 'updated_at', 'last_login'],
+      select: ['id', 'name', 'email', 'role', 'phone', 'profile_picture', 'is_active', 'created_at', 'updated_at', 'last_login'],
     });
   }
 
   async findOne(id: string): Promise<User> {
     const user = await this.userRepo.findOne({
       where: { id },
-      select: ['id', 'name', 'email', 'role', 'phone', 'is_active', 'created_at', 'updated_at', 'last_login'],
+      select: ['id', 'name', 'email', 'role', 'phone', 'profile_picture', 'is_active', 'created_at', 'updated_at', 'last_login'],
     });
     if (!user) {
       throw new NotFoundException(`User with ID ${id} not found`);
@@ -88,7 +88,14 @@ export class UserService {
       }
     }
 
-    Object.assign(user, updateUserDto);
+    // Handle null values for nullable fields (like profile_picture)
+    Object.keys(updateUserDto).forEach((key) => {
+      if (updateUserDto[key] === undefined) {
+        // Skip undefined values to allow partial updates
+        return;
+      }
+      user[key] = updateUserDto[key] === null ? null : updateUserDto[key];
+    });
     await this.userRepo.save(user);
     // Return user without password
     return await this.findOne(id);
