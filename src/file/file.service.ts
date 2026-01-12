@@ -73,7 +73,7 @@ export class FileService {
       await this.s3Client.send(command);
 
       // Get public URL (use custom domain if configured, otherwise use signed URL)
-      const publicUrl = this.configService.get<string>('R2_PUBLIC_URL');
+      const publicUrl = this.configService.get<string>('R2_PUBLIC_URL','https://pub-678a28646eb147b2bea0fc8c1ed91983.r2.dev');
       let url: string;
       
       if (publicUrl) {
