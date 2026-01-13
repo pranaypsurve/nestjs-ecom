@@ -65,7 +65,7 @@ export class AddProfilePictureAndProductImages1736800000000
 
   public async down(queryRunner: QueryRunner): Promise<void> {
     // Rollback: Remove profile_picture from users
-    const usersTable = await queryRunner.getTable('users');
+    const usersTable = await queryRunner.getTable('user');
     const profilePictureColumn = usersTable?.findColumnByName('profile_picture');
 
     if (profilePictureColumn) {
