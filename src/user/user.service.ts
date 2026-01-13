@@ -6,19 +6,19 @@ import {
 } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { LoginDto } from 'src/auth/dto/loginUser.dto';
-import { RegisterDto } from 'src/auth/dto/registerUser.dto';
 import { Repository } from 'typeorm';
 import { User } from './schema/user.entity';
 import { UpdateUserDto } from './dto/update-user.dto';
+import { CreateUserDto } from './dto/create-user.dto';
 
 @Injectable()
 export class UserService {
   constructor(@InjectRepository(User) private userRepo: Repository<User>) {}
-  async createUser(registerUserDto: RegisterDto) {
+  async createUser(createUserDto: CreateUserDto) {
     try {
       const result = await this.userRepo.save({
-        ...registerUserDto,
-        role: registerUserDto.role || 'user',
+        ...createUserDto,
+        role: createUserDto.role || 'user',
       });
       console.log(result);
       return result;

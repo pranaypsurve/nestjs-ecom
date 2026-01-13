@@ -2,6 +2,7 @@ import {
   BadRequestException,
   Injectable,
   NotFoundException,
+  Logger,
 } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
@@ -13,9 +14,12 @@ import { ProductService } from 'src/product/product.service';
 import { CouponService } from 'src/coupon/coupon.service';
 import { ShippingAddressService } from 'src/shipping-address/shipping-address.service';
 import { AddressType } from 'src/shipping-address/schema/shipping-address.entity';
+import { EmailService } from 'src/email/email.service';
 
 @Injectable()
 export class OrderService {
+  private readonly logger = new Logger(OrderService.name);
+
   constructor(
     @InjectRepository(Order)
     private orderRepo: Repository<Order>,
@@ -24,6 +28,7 @@ export class OrderService {
     private productService: ProductService,
     private couponService: CouponService,
     private shippingAddressService: ShippingAddressService,
+    private emailService: EmailService,
   ) {}
 
   /**
@@ -227,7 +232,14 @@ export class OrderService {
       await this.couponService.incrementUsage(couponId);
     }
 
-    return await this.findOne(savedOrder.id);
+    const orderWithRelations = await this.findOne(savedOrder.id);
+
+    // Send order confirmation email (non-blocking - don't fail order creation if email fails)
+    this.sendOrderConfirmationEmail(orderWithRelations).catch((error) => {
+      this.logger.error(`Failed to send order confirmation email for order ${orderWithRelations.order_number}:`, error);
+    });
+
+    return orderWithRelations;
   }
 
   async findAll(userId?: string): Promise<Order[]> {
@@ -276,6 +288,47 @@ export class OrderService {
 
   async getUserOrders(userId: string): Promise<Order[]> {
     return await this.findAll(userId);
+  }
+
+  /**
+   * Send order confirmation email to customer
+   * Handles errors gracefully - doesn't throw to avoid failing order creation
+   */
+  private async sendOrderConfirmationEmail(order: Order): Promise<void> {
+    try {
+      // Get customer email - prefer shipping address email, fallback to user email
+      const customerEmail = order.shipping_address?.email || order.user?.email;
+
+      if (!customerEmail) {
+        this.logger.warn(`No email found for order ${order.order_number}`);
+        return;
+      }
+
+      // Format order items for email
+      const items = order.orderItems.map((item) => ({
+        name: item.product?.name || 'Unknown Product',
+        quantity: item.quantity,
+        price: parseFloat(item.price.toString()),
+      }));
+
+      // Format shipping address for email
+      const shippingAddress = order.shipping_address
+        ? `${order.shipping_address.first_name} ${order.shipping_address.last_name}\n${order.shipping_address.street_address}\n${order.shipping_address.city}, ${order.shipping_address.state} ${order.shipping_address.zip_code}\n${order.shipping_address.country}`
+        : 'N/A';
+
+      // Send email
+      await this.emailService.sendOrderConfirmation(customerEmail, {
+        orderId: order.id,
+        orderNumber: order.order_number,
+        total: parseFloat(order.total.toString()),
+        items,
+        shippingAddress,
+      });
+    } catch (error) {
+      // Log error but don't throw - order creation should succeed even if email fails
+      this.logger.error(`Error sending order confirmation email:`, error);
+      // Don't re-throw - let caller handle or ignore
+    }
   }
 }
 
