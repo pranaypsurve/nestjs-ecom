@@ -69,8 +69,8 @@ export class AddProfilePictureAndProductImages1736800000000
     const profilePictureColumn = usersTable?.findColumnByName('profile_picture');
 
     if (profilePictureColumn) {
-      await queryRunner.dropColumn('users', 'profile_picture');
-      console.log('✅ Removed profile_picture column from users table');
+      await queryRunner.dropColumn('user', 'profile_picture');
+      console.log('✅ Removed profile_picture column from user table');
     }
 
     // Rollback: Change images back to image in products
