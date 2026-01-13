@@ -25,7 +25,7 @@ import { FileModule } from './file/file.module';
     }),
     ThrottlerModule.forRoot([{
       ttl: 60000, // 1 minute
-      limit: 40, // 100 requests per minute (default, can be overridden)
+      limit: 40, // 40 requests per minute (default, can be overridden)
     }]),
     JwtModule.registerAsync({
       global: true,
@@ -51,7 +51,11 @@ import { FileModule } from './file/file.module';
         password: configService.get<string>('DB_PASSWORD', ''),
         database: configService.get<string>('DB_DATABASE', 'ecommerce'),
         autoLoadEntities: true,
-        synchronize: configService.get<string>('NODE_ENV') !== 'production',
+        synchronize: configService.get<string>('NODE_ENV') !== 'production', // Allow sync in dev for initial setup
+        migrations: ['dist/migrations/*.js'], // Use .js because NestJS runs compiled code
+        migrationsRun: configService.get<string>('NODE_ENV') === 'production', // Only auto-run in production
+        migrationsTableName: 'migrations', // Table to track migrations
+        logging: configService.get<string>('NODE_ENV') === 'development',
       }),
       inject: [ConfigService],
     }),
