@@ -8,6 +8,7 @@ import { ProductModule } from 'src/product/product.module';
 import { CouponModule } from 'src/coupon/coupon.module';
 import { AuthModule } from 'src/auth/auth.module';
 import { ShippingAddressModule } from 'src/shipping-address/shipping-address.module';
+import { EmailModule } from 'src/email/email.module';
 
 @Module({
   imports: [
@@ -16,6 +17,7 @@ import { ShippingAddressModule } from 'src/shipping-address/shipping-address.mod
     CouponModule,
     AuthModule,
     ShippingAddressModule,
+    EmailModule,
   ],
   controllers: [OrderController],
   providers: [OrderService],

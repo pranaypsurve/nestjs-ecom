@@ -40,12 +40,14 @@ export class AuthService {
     return { accessToken, refreshToken };
   }
 
-  async registerUser(registerUserDto: RegisterDto) {
-    console.log('user',registerUserDto)
+  async registerUser(registerUserDto: Omit<RegisterDto, 'otp'>) {
     const hashPswd = await bcrypt.hash(registerUserDto.password, 10);
     const user = await this.userService.createUser({
-      ...registerUserDto,
+      email: registerUserDto.email,
+      name: registerUserDto.name,
       password: hashPswd,
+      role: registerUserDto.role,
+      phone: registerUserDto.phone,
     });
 
     // Generate tokens
