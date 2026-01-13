@@ -4,15 +4,16 @@ export class AddProfilePictureAndProductImages1736800000000
   implements MigrationInterface
 {
   public async up(queryRunner: QueryRunner): Promise<void> {
-    // Add profile_picture column to users table (if table exists)
-    const usersTable = await queryRunner.getTable('users');
+    // Add profile_picture column to user table (if table exists)
+    // Note: User entity uses @Entity() so table name is 'user' (lowercase singular)
+    const usersTable = await queryRunner.getTable('user');
     
     if (usersTable) {
       const profilePictureColumn = usersTable.findColumnByName('profile_picture');
 
       if (!profilePictureColumn) {
         await queryRunner.addColumn(
-          'users',
+          'user',
           new TableColumn({
             name: 'profile_picture',
             type: 'varchar',
@@ -20,12 +21,12 @@ export class AddProfilePictureAndProductImages1736800000000
             isNullable: true,
           }),
         );
-        console.log('✅ Added profile_picture column to users table');
+        console.log('✅ Added profile_picture column to user table');
       } else {
-        console.log('ℹ️  profile_picture column already exists in users table');
+        console.log('ℹ️  profile_picture column already exists in user table');
       }
     } else {
-      console.log('⚠️  users table does not exist. Skipping profile_picture column addition.');
+      console.log('⚠️  user table does not exist. Skipping profile_picture column addition.');
       console.log('   Note: Tables should be created by synchronize in development or initial migration.');
     }
 
@@ -64,7 +65,7 @@ export class AddProfilePictureAndProductImages1736800000000
   }
 
   public async down(queryRunner: QueryRunner): Promise<void> {
-    // Rollback: Remove profile_picture from users
+    // Rollback: Remove profile_picture from user table
     const usersTable = await queryRunner.getTable('user');
     const profilePictureColumn = usersTable?.findColumnByName('profile_picture');
 
