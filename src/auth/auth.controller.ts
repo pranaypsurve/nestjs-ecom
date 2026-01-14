@@ -90,19 +90,23 @@ export class AuthController {
     const { otp, ...userData } = registerUserDto;
     const result = await this.authService.registerUser(userData);
 
+    const isProduction = this.configService.get<string>('NODE_ENV') === 'production';
+    const cookieSecure = this.configService.get<string>('COOKIE_SECURE', 'false') === 'true' || isProduction;
+    const cookieSameSite = this.configService.get<string>('COOKIE_SAME_SITE', 'lax') as 'lax' | 'strict' | 'none';
+
     // Set cookies
     res.cookie('accessToken', result.accessToken, {
       httpOnly: true,
-      secure: process.env.NODE_ENV === 'production', // HTTPS only in production
-      sameSite: 'lax',
+      secure: cookieSecure,
+      sameSite: cookieSameSite,
       maxAge: 5 * 60 * 1000, // 5 minutes
       path: '/',
     });
 
     res.cookie('refreshToken', result.refreshToken, {
       httpOnly: true,
-      secure: process.env.NODE_ENV === 'production',
-      sameSite: 'lax',
+      secure: cookieSecure,
+      sameSite: cookieSameSite,
       maxAge: 10 * 60 * 1000, // 10 minutes
       path: '/',
     });

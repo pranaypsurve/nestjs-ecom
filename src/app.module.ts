@@ -14,6 +14,7 @@ import { CouponModule } from './coupon/coupon.module';
 import { GiftVoucherModule } from './gift-voucher/gift-voucher.module';
 import { ShippingAddressModule } from './shipping-address/shipping-address.module';
 import { FileModule } from './file/file.module';
+import { User } from './user/schema/user.entity';
 
 @Module({
   imports: [
@@ -59,6 +60,7 @@ import { FileModule } from './file/file.module';
       }),
       inject: [ConfigService],
     }),
+    TypeOrmModule.forFeature([User]),
     AuthModule,
     CategoryModule,
     ProductModule,
