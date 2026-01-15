@@ -6,7 +6,7 @@ import {
 } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
-import { Order, OrderStatus, AddressData } from './schema/order.entity';
+import { Order, OrderStatus, AddressData, PaymentMethod } from './schema/order.entity';
 import { OrderItem } from './schema/order-item.entity';
 import { CreateOrderDto } from './dto/create-order.dto';
 import { UpdateOrderDto } from './dto/update-order.dto';
@@ -15,6 +15,7 @@ import { CouponService } from 'src/coupon/coupon.service';
 import { ShippingAddressService } from 'src/shipping-address/shipping-address.service';
 import { AddressType } from 'src/shipping-address/schema/shipping-address.entity';
 import { EmailService } from 'src/email/email.service';
+import { InvoiceService } from 'src/invoice/invoice.service';
 
 @Injectable()
 export class OrderService {
@@ -29,6 +30,7 @@ export class OrderService {
     private couponService: CouponService,
     private shippingAddressService: ShippingAddressService,
     private emailService: EmailService,
+    private invoiceService: InvoiceService,
   ) {}
 
   /**
@@ -223,6 +225,7 @@ export class OrderService {
       billing_same_as_shipping: sameAsShipping,
       notes: createOrderDto.notes,
       status: OrderStatus.PENDING,
+      payment_method: createOrderDto.payment_method || PaymentMethod.COD, // Default to COD if not specified
     });
 
     const savedOrder = await this.orderRepo.save(order);
@@ -233,6 +236,17 @@ export class OrderService {
     }
 
     const orderWithRelations = await this.findOne(savedOrder.id);
+
+    // Generate invoice for COD orders immediately
+    if (orderWithRelations.payment_method === PaymentMethod.COD) {
+      this.generateInvoiceForOrder(orderWithRelations).catch((error) => {
+        this.logger.error(
+          `Failed to generate invoice for COD order ${orderWithRelations.order_number}:`,
+          error,
+        );
+        // Don't fail order creation if invoice generation fails
+      });
+    }
 
     // Send order confirmation email (non-blocking - don't fail order creation if email fails)
     this.sendOrderConfirmationEmail(orderWithRelations).catch((error) => {
@@ -327,6 +341,94 @@ export class OrderService {
     } catch (error) {
       // Log error but don't throw - order creation should succeed even if email fails
       this.logger.error(`Error sending order confirmation email:`, error);
+      // Don't re-throw - let caller handle or ignore
+    }
+  }
+
+  /**
+   * Generate and upload invoice for an order
+   * Updates order with invoice details
+   * Handles errors gracefully - doesn't throw to avoid failing order creation
+   */
+  private async generateInvoiceForOrder(order: Order): Promise<void> {
+    try {
+      // Skip if invoice already generated
+      if (order.invoice_number) {
+        this.logger.log(
+          `Invoice already exists for order ${order.order_number}`,
+        );
+        return;
+      }
+
+      // Generate and upload invoice
+      const invoiceData = await this.invoiceService.generateAndUploadInvoice(
+        order,
+      );
+
+      // Update order with invoice details
+      order.invoice_number = invoiceData.invoiceNumber;
+      order.invoice_url = invoiceData.invoiceUrl;
+      order.invoice_file_path = invoiceData.filePath;
+      order.invoice_generated_at = new Date();
+
+      await this.orderRepo.save(order);
+
+      this.logger.log(
+        `✅ Invoice generated for order ${order.order_number}: ${invoiceData.invoiceNumber}`,
+      );
+
+      // Send invoice email to customer (non-blocking)
+      this.sendInvoiceEmail(order, invoiceData).catch((error) => {
+        this.logger.error(
+          `Failed to send invoice email for order ${order.order_number}:`,
+          error,
+        );
+        // Don't fail invoice generation if email fails
+      });
+    } catch (error) {
+      // Log error but don't throw - order creation should succeed even if invoice generation fails
+      this.logger.error(
+        `Error generating invoice for order ${order.order_number}:`,
+        error,
+      );
+      // Don't re-throw - let caller handle or ignore
+    }
+  }
+
+  /**
+   * Send invoice email to customer
+   * Handles errors gracefully - doesn't throw to avoid failing invoice generation
+   */
+  private async sendInvoiceEmail(
+    order: Order,
+    invoiceData: { invoiceNumber: string; invoiceUrl: string; filePath: string },
+  ): Promise<void> {
+    try {
+      // Get customer email - prefer shipping address email, fallback to user email
+      const customerEmail = order.shipping_address?.email || order.user?.email;
+
+      if (!customerEmail) {
+        this.logger.warn(
+          `No email found for invoice email for order ${order.order_number}`,
+        );
+        return;
+      }
+
+      // Send invoice email with PDF attachment
+      await this.emailService.sendInvoiceEmail(customerEmail, {
+        invoiceNumber: invoiceData.invoiceNumber,
+        orderNumber: order.order_number,
+        invoiceUrl: invoiceData.invoiceUrl,
+        invoiceFilePath: invoiceData.filePath,
+        total: parseFloat(order.total.toString()),
+      });
+
+      this.logger.log(
+        `✅ Invoice email sent to ${customerEmail} for order ${order.order_number}`,
+      );
+    } catch (error) {
+      // Log error but don't throw - invoice generation should succeed even if email fails
+      this.logger.error(`Error sending invoice email:`, error);
       // Don't re-throw - let caller handle or ignore
     }
   }

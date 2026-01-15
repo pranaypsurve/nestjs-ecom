@@ -34,6 +34,12 @@ export class ProductService {
     }
 
     const product = this.productRepo.create(createProductDto);
+    
+    // Set published_at if product is being created with ACTIVE status
+    if (product.status === ProductStatus.ACTIVE && !product.published_at) {
+      product.published_at = new Date();
+    }
+    
     return await this.productRepo.save(product);
   }
 
@@ -120,6 +126,16 @@ export class ProductService {
       }
     }
 
+    // Check if status is being changed to ACTIVE
+    const isBecomingActive = 
+      updateProductDto.status === ProductStatus.ACTIVE && 
+      product.status !== ProductStatus.ACTIVE;
+    
+    // Set published_at if product is becoming active and it hasn't been set yet
+    if (isBecomingActive && !product.published_at) {
+      product.published_at = new Date();
+    }
+    
     Object.assign(product, updateProductDto);
     return await this.productRepo.save(product);
   }

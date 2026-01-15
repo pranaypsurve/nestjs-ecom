@@ -84,6 +84,9 @@ export class Product {
   @Column({ type: 'enum', enum: ProductStatus, default: ProductStatus.ACTIVE })
   status: ProductStatus;
 
+  @Column({ type: 'timestamp', nullable: true })
+  published_at?: Date;
+
   @ManyToOne(() => Category, (category) => category.products)
   category: Category;
 

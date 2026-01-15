@@ -1,6 +1,7 @@
 import { Injectable, InternalServerErrorException, Logger } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { OtpType } from 'src/auth/schema/otp.entity';
+import { FileService } from 'src/file/file.service';
 
 @Injectable()
 export class EmailService {
@@ -10,7 +11,10 @@ export class EmailService {
   private readonly fromEmail: string;
   private readonly fromName: string;
 
-  constructor(private configService: ConfigService) {
+  constructor(
+    private configService: ConfigService,
+    private fileService: FileService,
+  ) {
     this.apiKey = this.configService.get<string>('BREVO_API_KEY', '');
     this.fromEmail = this.configService.get<string>(
       'EMAIL_FROM',
@@ -18,7 +22,7 @@ export class EmailService {
     );
     this.fromName = this.configService.get<string>(
       'EMAIL_FROM_NAME',
-      'Ecommerce App',
+      'Prisya Store',
     );
 
     if (!this.apiKey) {
@@ -33,6 +37,7 @@ export class EmailService {
     to: string | { email: string; name?: string }[],
     subject: string,
     htmlContent: string,
+    attachments?: Array<{ name: string; content: string }>,
   ): Promise<void> {
     try {
       // Convert single email string to array format
@@ -40,7 +45,7 @@ export class EmailService {
         ? to
         : [{ email: to, name: undefined }];
 
-      const payload = {
+      const payload: any = {
         sender: {
           name: this.fromName,
           email: this.fromEmail,
@@ -49,6 +54,11 @@ export class EmailService {
         subject,
         htmlContent,
       };
+
+      // Add attachments if provided
+      if (attachments && attachments.length > 0) {
+        payload.attachment = attachments;
+      }
 
       const response = await fetch(this.apiUrl, {
         method: 'POST',
@@ -196,7 +206,7 @@ export class EmailService {
     <tr>
       <td style="padding: 20px; text-align: center; background-color: #f8f9fa; border-top: 1px solid #e9ecef;">
         <p style="color: #999999; font-size: 12px; margin: 0;">
-          © ${new Date().getFullYear()} Ecommerce App. All rights reserved.
+          © ${new Date().getFullYear()} Prisya Store. All rights reserved.
         </p>
       </td>
     </tr>
@@ -243,7 +253,7 @@ export class EmailService {
     <tr>
       <td style="padding: 20px; text-align: center; background-color: #f8f9fa; border-top: 1px solid #e9ecef;">
         <p style="color: #999999; font-size: 12px; margin: 0;">
-          © ${new Date().getFullYear()} Ecommerce App. All rights reserved.
+          © ${new Date().getFullYear()} Prisya Store. All rights reserved.
         </p>
       </td>
     </tr>
@@ -290,7 +300,7 @@ export class EmailService {
     <tr>
       <td style="padding: 20px; text-align: center; background-color: #f8f9fa; border-top: 1px solid #e9ecef;">
         <p style="color: #999999; font-size: 12px; margin: 0;">
-          © ${new Date().getFullYear()} Ecommerce App. All rights reserved.
+          © ${new Date().getFullYear()} Prisya Store. All rights reserved.
         </p>
       </td>
     </tr>
@@ -351,7 +361,7 @@ export class EmailService {
       <tr>
         <td style="padding: 10px; border-bottom: 1px solid #e9ecef;">${item.name}</td>
         <td style="padding: 10px; border-bottom: 1px solid #e9ecef; text-align: center;">${item.quantity}</td>
-        <td style="padding: 10px; border-bottom: 1px solid #e9ecef; text-align: right;">$${item.price.toFixed(2)}</td>
+        <td style="padding: 10px; border-bottom: 1px solid #e9ecef; text-align: right;">₹${item.price.toFixed(2)}</td>
       </tr>
     `,
       )
@@ -396,7 +406,7 @@ export class EmailService {
           <tfoot>
             <tr>
               <td colspan="2" style="padding: 10px; text-align: right; font-weight: bold; border-top: 2px solid #dee2e6;">Total:</td>
-              <td style="padding: 10px; text-align: right; font-weight: bold; border-top: 2px solid #dee2e6;">$${orderData.total.toFixed(2)}</td>
+              <td style="padding: 10px; text-align: right; font-weight: bold; border-top: 2px solid #dee2e6;">₹${orderData.total.toFixed(2)}</td>
             </tr>
           </tfoot>
         </table>
@@ -409,7 +419,111 @@ export class EmailService {
     <tr>
       <td style="padding: 20px; text-align: center; background-color: #f8f9fa; border-top: 1px solid #e9ecef;">
         <p style="color: #999999; font-size: 12px; margin: 0;">
-          © ${new Date().getFullYear()} Ecommerce App. All rights reserved.
+          © ${new Date().getFullYear()} Prisya Store. All rights reserved.
+        </p>
+      </td>
+    </tr>
+  </table>
+</body>
+</html>
+    `;
+  }
+
+  /**
+   * Send invoice email with PDF attachment
+   */
+  async sendInvoiceEmail(
+    to: string,
+    invoiceData: {
+      invoiceNumber: string;
+      orderNumber: string;
+      invoiceUrl: string;
+      invoiceFilePath: string;
+      total: number;
+    },
+  ): Promise<void> {
+    try {
+      // Download PDF from R2
+      const pdfBuffer = await this.fileService.downloadFile(
+        invoiceData.invoiceFilePath,
+      );
+
+      // Convert PDF buffer to base64
+      const base64Content = pdfBuffer.toString('base64');
+
+      // Create invoice email HTML
+      const htmlContent = this.getInvoiceEmailTemplate(invoiceData);
+
+      // Send email with attachment
+      await this.sendEmail(
+        to,
+        `Invoice #${invoiceData.invoiceNumber} - Order ${invoiceData.orderNumber}`,
+        htmlContent,
+        [
+          {
+            name: `Invoice-${invoiceData.invoiceNumber}.pdf`,
+            content: base64Content,
+          },
+        ],
+      );
+
+      this.logger.log(
+        `✅ Invoice email sent to ${to} for order ${invoiceData.orderNumber}`,
+      );
+    } catch (error) {
+      this.logger.error('Error sending invoice email:', error);
+      throw new InternalServerErrorException('Failed to send invoice email');
+    }
+  }
+
+  /**
+   * Invoice email template
+   */
+  private getInvoiceEmailTemplate(invoiceData: {
+    invoiceNumber: string;
+    orderNumber: string;
+    total: number;
+  }): string {
+    return `
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Invoice</title>
+</head>
+<body style="margin: 0; padding: 0; font-family: Arial, sans-serif; background-color: #f4f4f4;">
+  <table role="presentation" style="width: 100%; border-collapse: collapse;">
+    <tr>
+      <td style="padding: 20px 0; text-align: center; background-color: #ffffff;">
+        <h1 style="color: #333333; margin: 0;">Invoice</h1>
+      </td>
+    </tr>
+    <tr>
+      <td style="padding: 40px 20px; background-color: #ffffff;">
+        <p style="color: #666666; font-size: 16px; line-height: 1.6; margin: 0 0 20px 0;">
+          Dear Customer,
+        </p>
+        <p style="color: #666666; font-size: 16px; line-height: 1.6; margin: 0 0 20px 0;">
+          Thank you for your order! Please find attached your invoice for order <strong>#${invoiceData.orderNumber}</strong>.
+        </p>
+        <div style="background-color: #f8f9fa; border-radius: 8px; padding: 20px; margin: 20px 0;">
+          <p style="margin: 0 0 10px 0;"><strong>Invoice Number:</strong> ${invoiceData.invoiceNumber}</p>
+          <p style="margin: 0 0 10px 0;"><strong>Order Number:</strong> #${invoiceData.orderNumber}</p>
+          <p style="margin: 0;"><strong>Total Amount:</strong> ₹${invoiceData.total.toFixed(2)}</p>
+        </div>
+        <p style="color: #666666; font-size: 14px; line-height: 1.6; margin: 20px 0 0 0;">
+          The invoice PDF is attached to this email. Please keep it for your records.
+        </p>
+        <p style="color: #666666; font-size: 14px; line-height: 1.6; margin: 20px 0 0 0;">
+          If you have any questions about your order, please don't hesitate to contact us.
+        </p>
+      </td>
+    </tr>
+    <tr>
+      <td style="padding: 20px; text-align: center; background-color: #f8f9fa; border-top: 1px solid #e9ecef;">
+        <p style="color: #999999; font-size: 12px; margin: 0;">
+          © ${new Date().getFullYear()} Prisya Store. All rights reserved.
         </p>
       </td>
     </tr>

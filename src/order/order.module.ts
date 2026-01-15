@@ -9,6 +9,7 @@ import { CouponModule } from 'src/coupon/coupon.module';
 import { AuthModule } from 'src/auth/auth.module';
 import { ShippingAddressModule } from 'src/shipping-address/shipping-address.module';
 import { EmailModule } from 'src/email/email.module';
+import { InvoiceModule } from 'src/invoice/invoice.module';
 
 @Module({
   imports: [
@@ -18,6 +19,7 @@ import { EmailModule } from 'src/email/email.module';
     AuthModule,
     ShippingAddressModule,
     EmailModule,
+    InvoiceModule,
   ],
   controllers: [OrderController],
   providers: [OrderService],

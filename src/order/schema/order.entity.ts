@@ -20,6 +20,11 @@ export enum OrderStatus {
   CANCELLED = 'cancelled',
 }
 
+export enum PaymentMethod {
+  COD = 'cod',
+  ONLINE = 'online',
+}
+
 // Address interface for type safety
 export interface AddressData {
   first_name: string;
@@ -85,6 +90,21 @@ export class Order {
 
   @Column({ type: 'text', nullable: true })
   notes?: string;
+
+  @Column({ type: 'enum', enum: PaymentMethod, nullable: true })
+  payment_method?: PaymentMethod;
+
+  @Column({ nullable: true })
+  invoice_number?: string;
+
+  @Column({ nullable: true })
+  invoice_url?: string;
+
+  @Column({ nullable: true })
+  invoice_file_path?: string;
+
+  @Column({ type: 'timestamp', nullable: true })
+  invoice_generated_at?: Date;
 
   @CreateDateColumn()
   created_at: Date;

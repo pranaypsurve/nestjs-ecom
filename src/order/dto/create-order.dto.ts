@@ -14,7 +14,7 @@ import {
   IsBoolean,
 } from 'class-validator';
 import { Type } from 'class-transformer';
-import { OrderStatus } from '../schema/order.entity';
+import { OrderStatus, PaymentMethod } from '../schema/order.entity';
 
 /**
  * Order item DTO - Uses productId
@@ -117,5 +117,9 @@ export class CreateOrderDto {
   @IsString()
   @IsOptional()
   notes?: string;
+
+  @IsEnum(PaymentMethod)
+  @IsOptional()
+  payment_method?: PaymentMethod;
 }
 

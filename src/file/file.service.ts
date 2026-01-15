@@ -2,6 +2,7 @@ import { Injectable, BadRequestException, InternalServerErrorException } from '@
 import { ConfigService } from '@nestjs/config';
 import { S3Client, PutObjectCommand, DeleteObjectCommand, GetObjectCommand } from '@aws-sdk/client-s3';
 import { getSignedUrl } from '@aws-sdk/s3-request-presigner';
+import { Readable } from 'stream';
 
 @Injectable()
 export class FileService {
@@ -160,6 +161,122 @@ export class FileService {
     } catch (error) {
       console.error('Error generating signed URL:', error);
       throw new InternalServerErrorException('Failed to generate signed URL');
+    }
+  }
+
+  /**
+   * Upload invoice PDF to R2 with organized folder structure
+   * Structure: invoices/YYYY/MM/INV-{invoiceNumber}-{orderNumber}.pdf
+   */
+  async uploadInvoice(
+    pdfBuffer: Buffer,
+    invoiceNumber: string,
+    orderNumber: string,
+  ): Promise<{ url: string; fileName: string }> {
+    try {
+      if (!pdfBuffer || pdfBuffer.length === 0) {
+        throw new BadRequestException('PDF buffer is required');
+      }
+
+      // Generate organized filename: invoices/YYYY/MM/INV-{invoiceNumber}-{orderNumber}.pdf
+      const now = new Date();
+      const year = now.getFullYear();
+      const month = String(now.getMonth() + 1).padStart(2, '0');
+      
+      // Clean order number for filename (remove special characters)
+      const cleanOrderNumber = orderNumber.replace(/[^a-zA-Z0-9-]/g, '-');
+      const fileName = `invoices/${year}/${month}/INV-${invoiceNumber}-${cleanOrderNumber}.pdf`;
+
+      const command = new PutObjectCommand({
+        Bucket: this.bucketName,
+        Key: fileName,
+        Body: pdfBuffer,
+        ContentType: 'application/pdf',
+        // Optional: Add metadata
+        Metadata: {
+          invoiceNumber,
+          orderNumber,
+          uploadedAt: now.toISOString(),
+        },
+      });
+
+      await this.s3Client.send(command);
+
+      // Get public URL (use custom domain if configured, otherwise use signed URL)
+      const publicUrl = this.configService.get<string>(
+        'R2_PUBLIC_URL',
+        'https://pub-678a28646eb147b2bea0fc8c1ed91983.r2.dev',
+      );
+      let url: string;
+
+      if (publicUrl) {
+        // Use custom domain if configured
+        url = `${publicUrl.replace(/\/$/, '')}/${fileName}`;
+      } else {
+        // Fallback: generate signed URL (valid for 1 year for invoices)
+        // Invoices should be accessible for a long time for record-keeping
+        url = await this.getSignedUrl(fileName, 31536000); // 1 year
+      }
+
+      return {
+        url,
+        fileName,
+      };
+    } catch (error) {
+      if (error instanceof BadRequestException) {
+        throw error;
+      }
+      console.error('Error uploading invoice to R2:', error);
+      throw new InternalServerErrorException('Failed to upload invoice');
+    }
+  }
+
+  /**
+   * Download file from R2 and return as Buffer
+   */
+  async downloadFile(filePath: string): Promise<Buffer> {
+    try {
+      if (!filePath) {
+        throw new BadRequestException('File path is required');
+      }
+
+      // Extract the key from URL if full URL is provided
+      let key = filePath;
+      if (filePath.includes('http')) {
+        // If it's a full URL, extract the path after the domain
+        // Example: https://pub-xxx.r2.dev/invoices/2025/01/file.pdf
+        // or: https://custom-domain.com/invoices/2025/01/file.pdf
+        const url = new URL(filePath);
+        // Remove leading slash from pathname
+        key = url.pathname.startsWith('/') ? url.pathname.substring(1) : url.pathname;
+      }
+
+      const command = new GetObjectCommand({
+        Bucket: this.bucketName,
+        Key: key,
+      });
+
+      const response = await this.s3Client.send(command);
+
+      if (!response.Body) {
+        throw new InternalServerErrorException('File not found in R2');
+      }
+
+      // Convert stream to buffer
+      const stream = response.Body as Readable;
+      const chunks: Buffer[] = [];
+
+      return new Promise((resolve, reject) => {
+        stream.on('data', (chunk) => chunks.push(chunk));
+        stream.on('end', () => resolve(Buffer.concat(chunks)));
+        stream.on('error', reject);
+      });
+    } catch (error) {
+      if (error instanceof BadRequestException) {
+        throw error;
+      }
+      console.error('Error downloading file from R2:', error);
+      throw new InternalServerErrorException('Failed to download file');
     }
   }
 }
